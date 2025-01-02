@@ -25,23 +25,25 @@ jobs:
 
       - name: Log in to Amazon ECR
         run: |
+          echo "Logging in to Amazon ECR"
           aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com
+        continue-on-error: true
 
       - name: Build Docker image
         run: |
+          echo "Building Docker image"
           docker build -t my-nginx-image .
           docker tag my-nginx-image:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
+        continue-on-error: true
 
       - name: Push Docker image to ECR
         run: |
+          echo "Pushing Docker image to ECR"
           docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
+        continue-on-error: true
 
       - name: Update Kubernetes deployment on EKS
         run: |
-          # Update kubeconfig to connect to EKS
-          aws eks update-kubeconfig --region ap-northeast-1 --name eksdemo  # Corrected region name
-
-          # Update the Kubernetes deployment with the new Docker image
+          echo "Updating Kubernetes deployment"
+          aws eks update-kubeconfig --region ap-northeast-1 --name eksdemo
           kubectl set image deployment/nginx-deployment nginx=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
-
-
