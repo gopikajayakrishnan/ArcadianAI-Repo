@@ -1,45 +1,47 @@
-name: Build and Push Docker image to Amazon ECR
+name: Build and Push Docker Image to Amazon ECR
 
 on:
   push:
     branches:
-      - main  # Trigger this workflow when changes are pushed to the main branch
+      - main  # Trigger on push to the main branch
+  pull_request:
+    branches:
+      - main  # Trigger on PRs targeting the main branch
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-push:
+    runs-on: ubuntu-latest  # Use an Ubuntu runner for your actions
 
     steps:
-    # Step 1: Checkout the code from the repository
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: Check out repository
+        uses: actions/checkout@v2
 
-    # Step 2: Set up Docker Buildx (for multi-platform builds if needed)
-    - name: Set up Docker Buildx
-      uses: docker/setup-buildx-action@v2
+      - name: Set up AWS CLI
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-northeast-1  # Corrected region name
 
-    # Step 3: Log in to Amazon ECR
-    - name: Log in to Amazon ECR
-      uses: aws-actions/amazon-ecr-login@v1
-      with:
-        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        aws-region: ${{ secrets.AWS_REGION }}
+      - name: Log in to Amazon ECR
+        run: |
+          aws ecr get-login-password --region ap-northeast-1 | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com
 
-    # Step 4: Build the Docker image
-    - name: Build Docker image
-      run: |
-        docker build -t ${{ secrets.ECR_REPOSITORY }} .
+      - name: Build Docker image
+        run: |
+          docker build -t my-nginx-image .
+          docker tag my-nginx-image:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
 
-    # Step 5: Tag the Docker image
-    - name: Tag Docker image
-      run: |
-        IMAGE_TAG=$(date +%Y%m%d%H%M%S)  # Use timestamp for unique tags
-        docker tag ${{ secrets.ECR_REPOSITORY }:latest} ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+      - name: Push Docker image to ECR
+        run: |
+          docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
 
-    # Step 6: Push the Docker image to Amazon ECR
-    - name: Push Docker image to ECR
-      run: |
-        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ secrets.AWS_REGION }}.amazonaws.com/${{ secrets.ECR_REPOSITORY }}:$IMAGE_TAG
+      - name: Update Kubernetes deployment on EKS
+        run: |
+          # Update kubeconfig to connect to EKS
+          aws eks update-kubeconfig --region ap-northeast-1 --name eksdemo  # Corrected region name
+
+          # Update the Kubernetes deployment with the new Docker image
+          kubectl set image deployment/nginx-deployment nginx=${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.ap-northeast-1.amazonaws.com/my-nginx-repository:latest
 
 
